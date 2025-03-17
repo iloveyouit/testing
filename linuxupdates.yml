@@ -1,6 +1,6 @@
 ---
 - name: Install Security Updates on Ubuntu Servers
-  hosts: [linux_group]
+  hosts: all
   become: yes
   gather_facts: yes
 
