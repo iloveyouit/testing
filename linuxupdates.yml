@@ -7,7 +7,7 @@
     smtp_server: "smtp.gmail.com"
     smtp_port: 587
     smtp_user: "saymypc@gmail.com"
-    smtp_pass: "abnitwbrkeyhqfig"
+    smtp_pass: "password"
     email_to: "rob.loftin@143it.com"  # This should be provided as an extra var when running the playbook
     current_date: "{{ ansible_date_time.date }}"
     current_time: "{{ ansible_date_time.time }}"
