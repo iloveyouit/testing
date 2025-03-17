@@ -8,7 +8,7 @@
     smtp_port: 587
     smtp_user: "saymypc@gmail.com"
     smtp_pass: "abnitwbrkeyhqfig"
-    email_to: "{{ email_recipient }}"  # This should be provided as an extra var when running the playbook
+    email_to: "rob.loftin@143it.com"  # This should be provided as an extra var when running the playbook
   
   tasks:
     - name: Collect System Information
