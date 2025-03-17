@@ -8,7 +8,9 @@
     smtp_port: 587
     smtp_user: "saymypc@gmail.com"
     smtp_pass: "abnitwbrkeyhqfig"
-    email_to: "rob.loftin@143it.com"  # This should be provided as an extra var when running the playbook
+    email_to: "{{ email_recipient }}"  # This should be provided as an extra var when running the playbook
+    current_date: "{{ ansible_date_time.date }}"
+    current_time: "{{ ansible_date_time.time }}"
   
   tasks:
     - name: Collect System Information
@@ -17,25 +19,80 @@
           - 'all'
       register: system_info
 
-    - name: Display System Information
-      ansible.builtin.debug:
-        msg: |
-          Hostname: {{ ansible_hostname }}
-          OS Family: {{ ansible_os_family }}
-          Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          Architecture: {{ ansible_architecture }}
-          Processor Count: {{ ansible_processor_count }}
-          Memory Total: {{ ansible_memtotal_mb }}MB
-          IP Address: {{ ansible_default_ipv4.address }}
-      register: system_info_output
-
     - name: Get Disk Usage
       ansible.builtin.shell: df -h
       register: disk_usage
-      
-    - name: Display Disk Usage
-      ansible.builtin.debug:
-        var: disk_usage.stdout_lines
+
+    - name: Get Memory Details
+      ansible.builtin.shell: free -h
+      register: memory_details
+      when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
+
+    - name: Get Running Services
+      ansible.builtin.shell: systemctl list-units --type=service --state=running | head -n 10
+      register: running_services
+      when: ansible_service_mgr == "systemd"
+
+    - name: Get Network Interfaces
+      ansible.builtin.shell: ip addr show
+      register: network_interfaces
+      when: ansible_system == "Linux"
+
+    - name: Format System Report
+      ansible.builtin.set_fact:
+        system_report: |
+          ===============================================
+                      SYSTEM INFORMATION REPORT
+          ===============================================
+          Generated on: {{ current_date }} at {{ current_time }}
+          
+          1. SYSTEM OVERVIEW
+          ----------------------------------------
+          Hostname: {{ ansible_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ ansible_kernel }}
+          Architecture: {{ ansible_architecture }}
+          
+          2. HARDWARE INFORMATION
+          ----------------------------------------
+          CPU Model: {{ ansible_processor[-1] }}
+          CPU Cores: {{ ansible_processor_cores }}
+          CPU Count: {{ ansible_processor_count }}
+          Total Memory: {{ ansible_memtotal_mb }}MB
+          
+          3. NETWORK CONFIGURATION
+          ----------------------------------------
+          Primary IP: {{ ansible_default_ipv4.address }}
+          Interface: {{ ansible_default_ipv4.interface }}
+          Gateway: {{ ansible_default_ipv4.gateway }}
+          MAC Address: {{ ansible_default_ipv4.macaddress }}
+          
+          4. DISK USAGE
+          ----------------------------------------
+          {{ disk_usage.stdout }}
+          
+          {% if memory_details.stdout is defined %}
+          5. MEMORY DETAILS
+          ----------------------------------------
+          {{ memory_details.stdout }}
+          {% endif %}
+          
+          {% if running_services.stdout is defined %}
+          6. TOP 10 RUNNING SERVICES
+          ----------------------------------------
+          {{ running_services.stdout }}
+          {% endif %}
+          
+          {% if network_interfaces.stdout is defined %}
+          7. NETWORK INTERFACES DETAILS
+          ----------------------------------------
+          {{ network_interfaces.stdout }}
+          {% endif %}
+          
+          ===============================================
+                      END OF REPORT
+          ===============================================
 
     - name: Send Email with System Information
       community.general.mail:
@@ -44,11 +101,6 @@
         username: "{{ smtp_user }}"
         password: "{{ smtp_pass }}"
         to: "{{ email_to }}"
-        subject: "System Information Report for {{ ansible_hostname }}"
-        body: |
-          System Information:
-          {{ system_info_output.msg }}
-          
-          Disk Usage:
-          {{ disk_usage.stdout }}
+        subject: "System Information Report for {{ ansible_hostname }} - {{ current_date }}"
+        body: "{{ system_report }}"
         secure: starttls
