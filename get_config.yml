@@ -1,0 +1,30 @@
+---
+- name: Gather Server Details
+  hosts: all
+  gather_facts: yes
+  
+  tasks:
+    - name: Collect System Information
+      ansible.builtin.setup:
+        gather_subset:
+          - 'all'
+      register: system_info
+
+    - name: Display System Information
+      ansible.builtin.debug:
+        msg: |
+          Hostname: {{ ansible_hostname }}
+          OS Family: {{ ansible_os_family }}
+          Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Architecture: {{ ansible_architecture }}
+          Processor Count: {{ ansible_processor_count }}
+          Memory Total: {{ ansible_memtotal_mb }}MB
+          IP Address: {{ ansible_default_ipv4.address }}
+
+    - name: Get Disk Usage
+      ansible.builtin.shell: df -h
+      register: disk_usage
+      
+    - name: Display Disk Usage
+      ansible.builtin.debug:
+        var: disk_usage.stdout_lines
