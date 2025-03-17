@@ -18,11 +18,15 @@
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Install security updates only
+    - name: Install unattended-upgrades package
       apt:
-        upgrade: security
-        force_apt_get: yes
+        name: unattended-upgrades
+        state: present
+
+    - name: Run unattended security upgrades
+      command: unattended-upgrades -d --dry-run
       register: security_updates
+      changed_when: "'Packages that will be upgraded:' in security_updates.stdout"
 
     - name: Check if reboot is required
       stat:
@@ -34,26 +38,22 @@
         update_report: |
           Security Updates Report for {{ ansible_hostname }}
           ------------------------------------------------
-          Date: {{ ansible_date_time.iso8601 }}
+          Date: {{ current_date }}
+          Time: {{ current_time }}
           
-          Updates Installed:
+          Updates Status:
           {{ security_updates.stdout }}
-          
-          Changes Made:
-          - Packages upgraded: {{ security_updates.upgraded | default(0) }}
-          - Packages newly installed: {{ security_updates.installed | default(0) }}
-          - Packages removed: {{ security_updates.removed | default(0) }}
           
           Reboot Required: {{ reboot_required.stat.exists | bool }}
 
     - name: Send email notification
       community.general.mail:
-        host: "{{ smtp_host }}"
+        host: "{{ smtp_server }}"
         port: "{{ smtp_port }}"
-        username: "{{ smtp_username }}"
-        password: "{{ smtp_password }}"
+        username: "{{ smtp_user }}"
+        password: "{{ smtp_pass }}"
         to: "{{ email_to }}"
-        from: "{{ email_from }}"
+        from: "{{ smtp_user }}"
         subject: "Security Updates Report - {{ ansible_hostname }}"
         body: "{{ update_report }}"
         secure: starttls
