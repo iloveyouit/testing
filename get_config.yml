@@ -3,6 +3,13 @@
   hosts: all
   gather_facts: yes
   
+  vars:
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_user: "saymypc@gmail.com"
+    smtp_pass: "abnitwbrkeyhqfig"
+    email_to: "{{ email_recipient }}"  # This should be provided as an extra var when running the playbook
+  
   tasks:
     - name: Collect System Information
       ansible.builtin.setup:
@@ -20,6 +27,7 @@
           Processor Count: {{ ansible_processor_count }}
           Memory Total: {{ ansible_memtotal_mb }}MB
           IP Address: {{ ansible_default_ipv4.address }}
+      register: system_info_output
 
     - name: Get Disk Usage
       ansible.builtin.shell: df -h
@@ -28,3 +36,19 @@
     - name: Display Disk Usage
       ansible.builtin.debug:
         var: disk_usage.stdout_lines
+
+    - name: Send Email with System Information
+      community.general.mail:
+        host: "{{ smtp_server }}"
+        port: "{{ smtp_port }}"
+        username: "{{ smtp_user }}"
+        password: "{{ smtp_pass }}"
+        to: "{{ email_to }}"
+        subject: "System Information Report for {{ ansible_hostname }}"
+        body: |
+          System Information:
+          {{ system_info_output.msg }}
+          
+          Disk Usage:
+          {{ disk_usage.stdout }}
+        secure: starttls
