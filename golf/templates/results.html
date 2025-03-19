@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Golf Score Analysis Results</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .stats-card {
+            transition: transform 0.2s;
+        }
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <h1 class="text-center mb-5">Golf Score Analysis Results</h1>
+        
+        <!-- Statistics Cards -->
+        <div class="row mb-5">
+            {% if stats %}
+            <div class="col-md-3 mb-4">
+                <div class="card stats-card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Total Score</h5>
+                        <p class="display-4">{{ stats.total_score }}</p>
+                        <p class="mb-0">({{ stats.over_under }} over par)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card stats-card bg-success text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Average Score</h5>
+                        <p class="display-4">{{ stats.average_score }}</p>
+                        <p class="mb-0">per hole</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card stats-card bg-info text-white">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Pars</h5>
+                        <p class="display-4">{{ stats.pars }}</p>
+                        <p class="mb-0">holes</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-4">
+                <div class="card stats-card bg-warning">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Birdies</h5>
+                        <p class="display-4">{{ stats.birdies }}</p>
+                        <p class="mb-0">holes</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Score Table -->
+        <div class="card mb-5">
+            <div class="card-header">
+                <h3 class="mb-0">Hole-by-Hole Scores</h3>
+            </div>
+            <div class="card-body">
+                {% if table %}
+                {{ table | safe }}
+                {% else %}
+                <p class="text-muted">No score data available.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Performance Charts -->
+        {% if plot_url %}
+        <div class="card mb-5">
+            <div class="card-header">
+                <h3 class="mb-0">Performance Visualization</h3>
+            </div>
+            <div class="card-body text-center">
+                <img src="data:image/png;base64,{{ plot_url }}" class="img-fluid" alt="Performance Chart">
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Download Link -->
+        {% if csv_filename %}
+        <div class="text-center">
+            <a href="{{ url_for('download_csv', filename=csv_filename) }}" class="btn btn-primary">
+                Download Score Data (CSV)
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- Back Button -->
+        <div class="text-center mt-4">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Upload Another Scorecard</a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

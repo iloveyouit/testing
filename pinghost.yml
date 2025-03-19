@@ -1,7 +1,0 @@
----
-- name: Ping Virtual Hosts
-  hosts: all
-  gather_facts: false
-  tasks:
-    - name: Ping Virtual hosts
-      ping:
