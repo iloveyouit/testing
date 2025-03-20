@@ -11,6 +11,7 @@ import base64
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import logging
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -67,40 +68,74 @@ def preprocess_image(image_path):
         raise
 
 def extract_text_from_image(image_path):
-    """Extract text with enhanced OCR configuration"""
     try:
-        logger.debug("Starting OCR process")
-        processed_image = preprocess_image(image_path)
-        pil_image = Image.fromarray(processed_image)
-        
-        # Try different PSM modes and configurations
-        configs = [
-            '--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789 --dpi 300',  # Uniform block
-            '--oem 3 --psm 4 -c tessedit_char_whitelist=0123456789 --dpi 300',  # Column of text
-            '--oem 3 --psm 11 -c tessedit_char_whitelist=0123456789 --dpi 300',  # Single line
-            '--oem 3 --psm 3 -c tessedit_char_whitelist=0123456789 --dpi 300',  # Auto
-        ]
-        
+        # Check if tesseract is installed
+        if not shutil.which('tesseract'):
+            raise Exception("Tesseract is not installed. Please install it using 'brew install tesseract'")
+
+        # Read and preprocess the image
+        image = cv2.imread(image_path)
+        if image is None:
+            raise Exception("Could not read image file. Please ensure it's a valid image.")
+
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        logger.info("Converted image to grayscale")
+
+        # Apply Gaussian blur
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        logger.info("Applied Gaussian blur")
+
+        # Apply adaptive thresholding
+        thresh = cv2.adaptiveThreshold(
+            blurred, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, 11, 2
+        )
+        logger.info("Applied adaptive thresholding")
+
+        # Apply dilation
+        kernel = np.ones((2,2), np.uint8)
+        dilated = cv2.dilate(thresh, kernel, iterations=1)
+        logger.info("Applied dilation")
+
+        # Save debug image
+        debug_path = os.path.join(app.config['UPLOAD_FOLDER'], 'debug_preprocessed.png')
+        cv2.imwrite(debug_path, dilated)
+        logger.info(f"Saved debug image to {debug_path}")
+
+        # Convert to PIL Image for Tesseract
+        pil_image = Image.fromarray(dilated)
+
+        # Try different PSM modes
+        psm_modes = [6, 4, 3]  # Single block, Column, and Auto
         best_text = ""
         max_numbers = 0
-        
-        for config in configs:
-            current_text = pytesseract.image_to_string(pil_image, config=config)
-            logger.debug(f"Config {config} extracted: {current_text}")
-            
-            # Count valid numbers in the extracted text
-            numbers = [n for n in current_text.split() if n.isdigit() and len(n) <= 2]
-            if len(numbers) > max_numbers:
-                max_numbers = len(numbers)
-                best_text = current_text
-        
-        if not best_text.strip():
-            raise ValueError("No text could be extracted with any configuration")
-        
-        logger.debug(f"Best extracted text: {best_text}")
+
+        for psm in psm_modes:
+            try:
+                config = f'--oem 3 --psm {psm} -c tessedit_char_whitelist=0123456789 --dpi 300'
+                text = pytesseract.image_to_string(pil_image, config=config)
+                
+                # Count valid numbers in the text
+                numbers = [n for n in text.split() if n.isdigit() and len(n) <= 2]
+                if len(numbers) > max_numbers:
+                    max_numbers = len(numbers)
+                    best_text = text
+                
+                logger.info(f"PSM {psm} extracted {len(numbers)} numbers")
+            except Exception as e:
+                logger.warning(f"PSM {psm} failed: {str(e)}")
+                continue
+
+        if not best_text:
+            raise Exception("No text could be extracted from the image")
+
+        logger.info(f"Best OCR result found {max_numbers} numbers")
         return best_text
+
     except Exception as e:
-        logger.error(f"Error in extract_text_from_image: {str(e)}")
+        logger.error(f"Error in extract_text_from_image: {str(e)}", exc_info=True)
         raise
 
 def parse_golf_score(text):
@@ -226,52 +261,68 @@ def save_to_csv(df, filename='golf_scores.csv'):
 def index():
     if request.method == 'POST':
         try:
+            logger.info("POST request received")
             if 'file' not in request.files:
+                logger.error("No file in request")
                 flash('No file uploaded', 'error')
                 return render_template('upload.html')
             
             file = request.files['file']
             if file.filename == '':
+                logger.error("Empty filename")
                 flash('No selected file', 'error')
                 return render_template('upload.html')
             
+            logger.info(f"Processing file: {file.filename}")
+            
             if not allowed_file(file.filename):
+                logger.error(f"Invalid file type: {file.filename}")
                 flash('Invalid file type. Please upload a PNG or JPEG image.', 'error')
                 return render_template('upload.html')
             
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
-            logger.debug(f"Saved uploaded file to {file_path}")
+            logger.info(f"File saved to: {file_path}")
             
-            extracted_text = extract_text_from_image(file_path)
-            if not extracted_text.strip():
-                flash('No text could be extracted from the image. Please ensure the image is clear and contains visible numbers.', 'error')
+            try:
+                extracted_text = extract_text_from_image(file_path)
+                logger.info(f"Extracted text length: {len(extracted_text)}")
+                if not extracted_text.strip():
+                    logger.error("No text extracted from image")
+                    flash('No text could be extracted from the image. Please ensure the image is clear and contains visible numbers.', 'error')
+                    return render_template('upload.html')
+                
+                df = parse_golf_score(extracted_text)
+                logger.info(f"Parsed dataframe shape: {df.shape}")
+                if df.empty:
+                    logger.error("No valid golf scores found in extracted text")
+                    flash('No valid golf score data could be extracted from the image.', 'error')
+                    return render_template('upload.html')
+                
+                stats = calculate_statistics(df)
+                logger.info("Statistics calculated")
+                plot_data = plot_performance(df)
+                logger.info("Performance plot generated")
+                csv_filename = save_to_csv(df)
+                logger.info(f"Data saved to CSV: {csv_filename}")
+                
+                logger.info("Rendering results template")
+                return render_template(
+                    'results.html',
+                    table=df.to_html(classes='table table-striped table-hover'),
+                    plot_url=plot_data,
+                    stats=stats,
+                    csv_filename=csv_filename
+                )
+            except Exception as e:
+                logger.error(f"Error processing image: {str(e)}", exc_info=True)
+                flash(f'Error processing image: {str(e)}', 'error')
                 return render_template('upload.html')
-            
-            df = parse_golf_score(extracted_text)
-            if df.empty:
-                flash('No valid golf score data could be extracted from the image.', 'error')
-                return render_template('upload.html')
-            
-            stats = calculate_statistics(df)
-            plot_data = plot_performance(df)
-            csv_filename = save_to_csv(df)
-            
-            logger.debug(f"Generated statistics: {stats}")
-            logger.debug(f"Saved CSV as: {csv_filename}")
-            
-            return render_template(
-                'results.html',
-                table=df.to_html(classes='table table-striped table-hover'),
-                plot_url=plot_data,
-                stats=stats,
-                csv_filename=csv_filename
-            )
-            
+                
         except Exception as e:
-            logger.error(f"Error processing request: {str(e)}")
-            flash(f'Error processing image: {str(e)}', 'error')
+            logger.error(f"Error in request handling: {str(e)}", exc_info=True)
+            flash(f'Error processing request: {str(e)}', 'error')
             return render_template('upload.html')
     
     return render_template('upload.html')

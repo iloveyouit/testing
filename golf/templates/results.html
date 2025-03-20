@@ -18,9 +18,20 @@
     <div class="container py-5">
         <h1 class="text-center mb-5">Golf Score Analysis Results</h1>
         
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if stats %}
         <!-- Statistics Cards -->
         <div class="row mb-5">
-            {% if stats %}
             <div class="col-md-3 mb-4">
                 <div class="card stats-card bg-primary text-white">
                     <div class="card-body text-center">
@@ -34,7 +45,7 @@
                 <div class="card stats-card bg-success text-white">
                     <div class="card-body text-center">
                         <h5 class="card-title">Average Score</h5>
-                        <p class="display-4">{{ stats.average_score }}</p>
+                        <p class="display-4">{{ "%.1f"|format(stats.average_score) }}</p>
                         <p class="mb-0">per hole</p>
                     </div>
                 </div>
@@ -57,24 +68,23 @@
                     </div>
                 </div>
             </div>
-            {% endif %}
         </div>
 
         <!-- Score Table -->
+        {% if table %}
         <div class="card mb-5">
             <div class="card-header">
                 <h3 class="mb-0">Hole-by-Hole Scores</h3>
             </div>
             <div class="card-body">
-                {% if table %}
-                {{ table | safe }}
-                {% else %}
-                <p class="text-muted">No score data available.</p>
-                {% endif %}
+                <div class="table-responsive">
+                    {{ table | safe }}
+                </div>
             </div>
         </div>
+        {% endif %}
 
-        <!-- Performance Charts -->
+        <!-- Performance Chart -->
         {% if plot_url %}
         <div class="card mb-5">
             <div class="card-header">
@@ -88,15 +98,20 @@
 
         <!-- Download Link -->
         {% if csv_filename %}
-        <div class="text-center">
+        <div class="text-center mb-4">
             <a href="{{ url_for('download_csv', filename=csv_filename) }}" class="btn btn-primary">
                 Download Score Data (CSV)
             </a>
         </div>
         {% endif %}
+        {% else %}
+        <div class="alert alert-warning" role="alert">
+            No golf score data was found. Please try uploading your scorecard again.
+        </div>
+        {% endif %}
 
         <!-- Back Button -->
-        <div class="text-center mt-4">
+        <div class="text-center">
             <a href="{{ url_for('index') }}" class="btn btn-secondary">Upload Another Scorecard</a>
         </div>
     </div>
